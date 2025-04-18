@@ -9,7 +9,7 @@ export const fetchproduct = asyncHandler(async (req, res) => {
     try {
       // Retrieve all post from the database
       const prod = await Products.find().sort({ createdAt: -1 });
-  
+
       // Check if users are found
       if (!prod || prod.length === 0) {
         return res.status(404).json({

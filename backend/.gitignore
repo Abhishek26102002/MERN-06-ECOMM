@@ -1,4 +1,4 @@
+node_modules
 .env
-DONOTUPLOADME.md
-node_modules/
 DONOTTRACK.md
+README.md
