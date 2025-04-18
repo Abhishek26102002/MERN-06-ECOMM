@@ -1,0 +1,4 @@
+.env
+DONOTUPLOADME.md
+node_modules/
+DONOTTRACK.md
