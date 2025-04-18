@@ -2,3 +2,5 @@
 DONOTUPLOADME.md
 node_modules/
 DONOTTRACK.md
+
+git remote add origin https://github.com/Abhishek26102002/MERN-06-ECOMM.git
