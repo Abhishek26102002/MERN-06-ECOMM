@@ -4,7 +4,7 @@ import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 import { dbConnect } from "./Config/db.js";
-// import userRoute from "./Routes/userRouter.js"
+import userRoute from "./Routes/userRouter.js"
 import productRoute from "./Routes/productRoute.js"
 
 import { mail } from "./Controllers/mailController.js";
@@ -31,7 +31,7 @@ app.get("/api/user", (req, res) => {
   res.send("Abhishek");
 });
 
-// app.use("/api", userRoute);
+app.use("/api", userRoute);
 
 app.use("/api/product", productRoute);
 

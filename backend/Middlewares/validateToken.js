@@ -25,7 +25,7 @@ export const validateToken = async (req, res, next) => {
 
     // Find the user by ID
     const user = await Users.findById(decoded.userId).select("-password");
-
+  
     if (!user) {
       return res
         .status(404)
