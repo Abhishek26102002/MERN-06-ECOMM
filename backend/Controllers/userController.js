@@ -5,121 +5,170 @@ import jwt from "jsonwebtoken";
 import cloudinary from "../Config/cloudinary.js";
 import oauth2Client from "../utils/googleClient.utils.js";
 import { generateToken } from "../utils/token.utils.js";
-
+// import crypto from "crypto";
+import nodemailer from "nodemailer";
 
 export const fetchAllUsers = asyncHandler(async (req, res) => {
-  //At strict mode if we dont define some fields in schema so even when it is present in data mongoose denies that 
-    if (req.user.is_Admin !== true) {
-      return res.status(403).json({
+  //At strict mode if we dont define some fields in schema so even when it is present in data mongoose denies that
+  if (req.user.is_Admin !== true) {
+    return res.status(403).json({
+      success: false,
+      message: "User not Authorized",
+    });
+  }
+
+  try {
+    // Retrieve all users from the database
+    const users = await Users.find().sort({ createdAt: -1 });
+
+    // Check if users are found
+    if (!users || users.length === 0) {
+      return res.status(404).json({
         success: false,
-        message: "User not Authorized",
+        message: "No users found",
       });
     }
-  
-    try {
-      // Retrieve all users from the database
-      const users = await Users.find().sort({ createdAt: -1 });
-  
-      // Check if users are found
-      if (!users || users.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "No users found",
-        });
-      }
-  
-      // Respond with all users
-      res.status(200).json({
-        success: true,
-        data: users,
+
+    // Respond with all users
+    res.status(200).json({
+      success: true,
+      data: users,
+    });
+  } catch (error) {
+    console.log("Error in getuser Controller :", error.message);
+    res.status(500).json({ success: false, message: "Internal Server error" });
+  }
+});
+
+export const signup = asyncHandler(async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    // Validate input fields
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are mandatory",
       });
-    } catch (error) {
-      console.log("Error in getuser Controller :", error.message);
-      res.status(500).json({ success: false, message: "Internal Server error" });
     }
+
+    // Validate name
+    const nameRegex = /^[A-Za-z\s]{2,}$/;
+    if (!nameRegex.test(name)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid name: Must be at least 2 characters and contain only letters and spaces",
+      });
+    }
+
+    // Validate email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid email: Must be a valid email address",
+      });
+    }
+
+    // Validate password
+    const passRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!passRegex.test(password)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid password: Must be at least 8 characters long, include at least one uppercase letter, one lowercase letter, one number, and one special character",
+      });
+    }
+
+    // Check if user already exists
+    const userAvailable = await Users.findOne({ email });
+    if (userAvailable) {
+      return res.status(400).json({
+        success: false,
+        message: "Email already exists",
+      });
+    }
+
+    // Hash the password
+    const hashPass = await bcrypt.hash(password, 10);
+
+    // Generate OTP and expiry
+    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit
+    const otpExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    const user = await Users.create({
+      name,
+      email,
+      password: hashPass,
+      otp,
+      otpExpiry,
+    });
+
+    // Send OTP via email
+    const transporter = nodemailer.createTransport({
+      service: "Gmail",
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true, 
+      auth: {
+        user: process.env.MAIL_USER,
+        pass: process.env.MAIL_PASS,
+      },
+    });
+
+    await transporter.sendMail({
+      from: process.env.MAIL_USER,
+      to: user.email,
+      subject: "OTP Verification",
+      html: `<p>Your OTP is <strong>${otp}</strong>. It will expire in 10 minutes.</p>`,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "OTP sent to your email. Please verify to complete signup.",
+    });
+  } catch (error) {
+    console.log("Error in userRegister Controller :", error.message);
+    res.status(500).json({ success: false, message: "Internal Server error" });
+  }
+});
+
+export const verifyOTP = asyncHandler(async (req, res) => {
+  const { email, otp } = req.body;
+
+  const user = await Users.findOne({ email });
+  if (!user) {
+    return res.status(400).json({ success: false, message: "Invalid email" });
+  }
+
+  if (user.verified) {
+    return res
+      .status(400)
+      .json({ success: false, message: "User already verified" });
+  }
+
+  if (user.otp !== otp || user.otpExpiry < Date.now()) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Invalid or expired OTP" });
+  }
+
+  user.verified = true;
+  user.otp = undefined;
+  user.otpExpiry = undefined;
+  await user.save();
+
+  // Generate token after verification
+  generateToken(user._id, res);
+
+  res.status(200).json({
+    success: true,
+    message: "User verified successfully",
+    data: user,
   });
-  
-  export const signup = asyncHandler(async (req, res) => {
-    try {
-      const { name, email, password } = req.body;
-  
-      // Validate input fields
-      if (!name || !email || !password) {
-        return res.status(400).json({
-          success: false,
-          message: "All fields are mandatory",
-        });
-      }
-  
-      // Validate name
-      const nameRegex = /^[A-Za-z\s]{2,}$/;
-      if (!nameRegex.test(name)) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid name: Must be at least 2 characters and contain only letters and spaces",
-        });
-      }
-  
-      // Validate email
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid email: Must be a valid email address",
-        });
-      }
-  
-      // Validate password
-      const passRegex =
-        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-      if (!passRegex.test(password)) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid password: Must be at least 8 characters long, include at least one uppercase letter, one lowercase letter, one number, and one special character",
-        });
-      }
-  
-      // Check if user already exists
-      const userAvailable = await Users.findOne({ email });
-      if (userAvailable) {
-        return res.status(400).json({
-          success: false,
-          message: "Email already exists",
-        });
-      }
-  
-      // Hash the password
-      const hashPass = await bcrypt.hash(password, 10);
-  
-      // Create the user
-      const user = await Users.create({
-        name,
-        email,
-        password: hashPass,
-      });
-  
-      if (user) {
-        generateToken(user._id, res);
-  
-        return res.status(201).json({
-          success: true,
-          message: "User created successfully",
-          data: user,
-        });
-      } else {
-        return res.status(500).json({
-          success: false,
-          message: "An error occurred while creating the user",
-        });
-      }
-    } catch (error) {
-      console.log("Error in userRegister Controller :", error.message);
-      res.status(500).json({ success: false, message: "Internal Server error" });
-    }
-  });
-  
+});
 
 export const Login = asyncHandler(async (req, res) => {
   try {
@@ -170,7 +219,7 @@ export const googleAuth = async (req, res) => {
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
 
-    const ticket =  oauth2Client.verifyIdToken({
+    const ticket = oauth2Client.verifyIdToken({
       idToken: tokens.id_token,
       audience: process.env.GOOGLE_CLIENT_ID, // Match with frontend client ID
     });
@@ -201,10 +250,9 @@ export const googleAuth = async (req, res) => {
   }
 };
 
-
 export const Update = asyncHandler(async (req, res) => {
   try {
-    const { email, name, password ,address} = req.body;
+    const { email, name, password, address } = req.body;
 
     // Validate input fields
     if (!email) {
@@ -369,4 +417,3 @@ export const logout = (req, res) => {
     res.status(500).json({ success: false, message: "Internal Server error" });
   }
 };
-

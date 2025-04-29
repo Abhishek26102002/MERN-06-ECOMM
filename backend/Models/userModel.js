@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const userSchema =new mongoose.Schema(
+const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
@@ -10,33 +10,35 @@ const userSchema =new mongoose.Schema(
     // Wishlist of products
     wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: "products" }],
 
-    // Cart 
+    // Cart
     cart: [
       {
         product: { type: mongoose.Schema.Types.ObjectId, ref: "products" },
-        quantity: { type: Number, default: 1 }
-      }
+        quantity: { type: Number, default: 1 },
+      },
     ],
 
     // Detailed Address
     address: {
-      street: { type: String }, 
+      street: { type: String },
       city: { type: String },
       state: { type: String },
       country: { type: String },
-      zipCode: { type: String }
+      zipCode: { type: String },
     },
 
     // Orders Reference
     orders: [{ type: mongoose.Schema.Types.ObjectId, ref: "orders" }],
 
-    // Profile & Verification
-    verified: { type: Boolean, default: false },
+    // Profile 
     profilepic: { type: String, default: "" },
 
     // Last Login ?? idk how to use this filed will do that later
     lastLogin: { type: Date },
-    is_Admin: { type: Boolean, default: false }
+    is_Admin: { type: Boolean, default: false },
+    otp: { type: String },
+    otpExpiry: { type: Date },
+    verified: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

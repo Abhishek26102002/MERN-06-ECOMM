@@ -5,27 +5,20 @@ import nodemailer from "nodemailer";
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: "", // Replace with your email
-    pass: "", // Replace with your email password or app password
+    user: process.env.MAIL_USER, // Replace with your email
+    pass: process.env.MAIL_PASS, // Replace with your email password or app password
   },
 });
 
 // Handle form submission
 export const mail = asyncHandler(async (req, res) => {
-  const { name, email, phone, subject, category, message } = req.body;
+  const { email } = req.body;
 
   const mailOptions = {
-    from: email,
-    to: "mckvie25@gmail.com", // Your email
-    subject: `New message from ${name}`,
-    html: `
-      <p><strong>Name:</strong> ${name}</p>
-      <p><strong>Email:</strong> ${email}</p>
-      <p><strong>Phone:</strong> ${phone}</p>
-      <p><strong>Subject:</strong> ${subject}</p>
-      <p><strong>Category:</strong> ${category}</p>
-      <p><strong>Message:</strong> ${message}</p>
-    `,
+    from: process.env.MAIL_USER,
+    to: user.email, // user email
+    subject: `OTP verification for Ecomm App`,
+    html: `<p>Your OTP is <strong>${otp}</strong>. It will expire in 10 minutes.</p>`,
   };
 
   try {
@@ -36,4 +29,3 @@ export const mail = asyncHandler(async (req, res) => {
     res.status(500).send("Failed to send email");
   }
 });
-

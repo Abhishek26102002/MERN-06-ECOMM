@@ -8,7 +8,8 @@ import {
   googleAuth,
   checkAuth,
   logout,
-  Update
+  Update,
+  verifyOTP
 } from "../Controllers/userController.js";
 import { validateToken } from "../Middlewares/validateToken.js";
 import upload from "../Middlewares/multer.js";
@@ -19,19 +20,21 @@ router.post("/login", Login); //Checked
 
 router.post("/signup", signup); //Checked
 
-router.post("/googleAuth", googleAuth);
+router.post("/verify-otp", verifyOTP); 
+
+router.post("/googleAuth", googleAuth); // NOT Checked
 
 router.post("/logout", logout);  //Checked
 
 router.get("/checkAuth", validateToken, checkAuth);   //Checked
 
 // Admin crud
-router.get("/fetchall", validateToken, fetchAllUsers);
+router.get("/fetchall", validateToken, fetchAllUsers); //Checked
 
 // user - address | pass | name
-router.put("/update", validateToken, Update);
+router.put("/update", validateToken, Update); //Checked
 
-router.put(
+router.put(  //Checked
   "/profilepicUpdate",
   upload.single("profilepic"),
   validateToken,
