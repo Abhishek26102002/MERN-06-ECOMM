@@ -33,7 +33,7 @@ export const validateToken = async (req, res, next) => {
     }
 
     req.user = user; // Attach user to the request object
-    next();
+    next(); // very imp => now run the next function/line of code
   } catch (error) {
     console.log("Error in ValidateToken Middleware :", error.message);
     res.status(500).json({ success: false, message: "Internal Server Error" });

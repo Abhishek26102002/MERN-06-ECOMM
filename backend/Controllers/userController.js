@@ -7,6 +7,10 @@ import oauth2Client from "../utils/googleClient.utils.js";
 import { generateToken } from "../utils/token.utils.js";
 // import crypto from "crypto";
 import nodemailer from "nodemailer";
+import Orders from "../Models/orderModel.js"; // adjust path as needed
+import Products from "../Models/productModel.js"; // assuming you're using a separate model
+import Cart from "../Models/cartModel.js";
+import WishList from "../Models/wishListModel.js";
 
 export const fetchAllUsers = asyncHandler(async (req, res) => {
   //At strict mode if we dont define some fields in schema so even when it is present in data mongoose denies that
@@ -111,7 +115,7 @@ export const signup = asyncHandler(async (req, res) => {
       service: "Gmail",
       host: "smtp.gmail.com",
       port: 465,
-      secure: true, 
+      secure: true,
       auth: {
         user: process.env.MAIL_USER,
         pass: process.env.MAIL_PASS,
@@ -417,3 +421,345 @@ export const logout = (req, res) => {
     res.status(500).json({ success: false, message: "Internal Server error" });
   }
 };
+
+// TODO : add payment method properly
+// reduce the stock of the product
+//
+export const createOrder = async (req, res) => {
+  try {
+    const {
+      products, // array: [{ productID, quantity }]
+      shippingAddress,
+      billingAddress,
+      paymentMethod,
+      transactionId,
+    } = req.body;
+
+    const userId = req.user.id;
+
+    if (!products || products.length === 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "No products provided" });
+    }
+
+    let totalAmount = 0;
+    const detailedProducts = [];
+
+    for (const item of products) {
+      const { productID, quantity, colors } = item;
+      const product = await Products.findById(productID);
+
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: `Product not found: ${productID}`,
+        });
+      }
+
+      // Find the selected color variant
+      const selectedColor = product.colors.find(
+        (clr) => clr.name === colors.name && clr.hex === colors.hex
+      );
+
+      if (!selectedColor) {
+        return res.status(400).json({
+          success: false,
+          message: `Color ${colors.name} not found for product ${product.name}`,
+        });
+      }
+
+      // Find the selected size variant
+      const selectedSize = selectedColor.sizes.find(
+        (sz) => sz.size === colors.sizes.size
+      );
+
+      if (!selectedSize) {
+        return res.status(400).json({
+          success: false,
+          message: `Size ${colors.sizes.size} not available in color ${colors.name}`,
+        });
+      }
+
+      // Calculate price based on quantity and unit price
+      const totalPrice = selectedSize.price * quantity;
+      totalAmount += totalPrice;
+
+      // Append detailed product info
+      detailedProducts.push({
+        productID,
+        name: product.name,
+        description: product.description,
+        colour: {
+          name: selectedColor.name,
+          hex: selectedColor.hex,
+          image: selectedColor.image,
+          sizes: {
+            size: selectedSize.size,
+            price: selectedSize.price,
+            stock: selectedSize.stock,
+            sku: selectedSize.sku,
+          },
+        },
+        quantity,
+        totalPrice,
+      });
+    }
+
+    const orderID = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+    const deliveryTimeline = {
+      orderDate: new Date(),
+      shippingDate: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000),
+      outForDeliveryDate: new Date(Date.now() + 6 * 24 * 60 * 60 * 1000),
+      deliveredDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    };
+
+    const newOrder = await Orders.create({
+      orderID,
+      orderBy: userId,
+      products: detailedProducts,
+      totalAmount,
+      status: "ordered",
+      deliveryTimeline,
+      shippingAddress,
+      billingAddress,
+      paymentMethod,
+      transactionId,
+      paymentStatus: paymentMethod === "COD" ? "pending" : "paid", // you can adjust this
+    });
+
+    //push orderID to user
+    await Users.findByIdAndUpdate(
+      userId,
+      { $push: { orders: newOrder._id } },
+      { new: true }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Order created successfully",
+      data: newOrder,
+    });
+  } catch (error) {
+    console.log("Error in CreateOrder Controller:", error.message);
+    res.status(500).json({ success: false, message: "Internal Server error" });
+  }
+};
+export const addToCart = asyncHandler(async (req, res) => {
+  try {
+    const { products } = req.body; // array: [{ productID, quantity }]
+
+    const userId = req.user.id;
+
+    if (!products || products.length === 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "No products provided" });
+    }
+
+    let totalAmount = 0;
+    const detailedProducts = [];
+
+    for (const item of products) {
+      const { productID, quantity, colors } = item;
+      const product = await Products.findById(productID);
+
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: `Product not found: ${productID}`,
+        });
+      }
+
+      // Find the selected color variant
+      const selectedColor = product.colors.find(
+        (clr) => clr.name === colors.name && clr.hex === colors.hex
+      );
+
+      if (!selectedColor) {
+        return res.status(400).json({
+          success: false,
+          message: `Color ${colors.name} not found for product ${product.name}`,
+        });
+      }
+
+      // Find the selected size variant
+      const selectedSize = selectedColor.sizes.find(
+        (sz) => sz.size === colors.sizes.size
+      );
+
+      if (!selectedSize) {
+        return res.status(400).json({
+          success: false,
+          message: `Size ${colors.sizes.size} not available in color ${colors.name}`,
+        });
+      }
+
+      // Calculate price based on quantity and unit price
+      const totalPrice = selectedSize.price * quantity;
+      totalAmount += totalPrice;
+
+      // Append detailed product info
+      detailedProducts.push({
+        productID,
+        name: product.name,
+        description: product.description,
+        colour: {
+          name: selectedColor.name,
+          hex: selectedColor.hex,
+          image: selectedColor.image,
+          sizes: {
+            size: selectedSize.size,
+            price: selectedSize.price,
+            stock: selectedSize.stock,
+            sku: selectedSize.sku,
+          },
+        },
+        quantity,
+      });
+    }
+
+    const newOrder = await Cart.create({
+      addedBy: userId,
+      products: detailedProducts,
+      totalAmount,
+    });
+
+    //push orderID to user
+    await Users.findByIdAndUpdate(
+      userId,
+      { $push: { cart: newOrder._id } },
+      { new: true }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Added to cart",
+      data: newOrder,
+    });
+  } catch (error) {
+    console.log("Error in addToCart Controller :", error.message);
+    res.status(500).json({ success: false, message: "Internal Server error" });
+  }
+});
+export const addToWishlist = asyncHandler(async (req, res) => {
+  try {
+    const { products } = req.body; // array: [{ productID, quantity }]
+
+    const userId = req.user.id;
+
+    if (!products || products.length === 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "No products provided" });
+    }
+
+    let totalAmount = 0;
+    const detailedProducts = [];
+
+    for (const item of products) {
+      const { productID, quantity, colors } = item;
+      const product = await Products.findById(productID);
+
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: `Product not found: ${productID}`,
+        });
+      }
+
+      // Find the selected color variant
+      const selectedColor = product.colors.find(
+        (clr) => clr.name === colors.name && clr.hex === colors.hex
+      );
+
+      if (!selectedColor) {
+        return res.status(400).json({
+          success: false,
+          message: `Color ${colors.name} not found for product ${product.name}`,
+        });
+      }
+
+      // Find the selected size variant
+      const selectedSize = selectedColor.sizes.find(
+        (sz) => sz.size === colors.sizes.size
+      );
+
+      if (!selectedSize) {
+        return res.status(400).json({
+          success: false,
+          message: `Size ${colors.sizes.size} not available in color ${colors.name}`,
+        });
+      }
+
+      // Calculate price based on quantity and unit price
+      const totalPrice = selectedSize.price * quantity;
+      totalAmount += totalPrice;
+
+      // Append detailed product info
+      detailedProducts.push({
+        productID,
+        name: product.name,
+        description: product.description,
+        colour: {
+          name: selectedColor.name,
+          hex: selectedColor.hex,
+          image: selectedColor.image,
+          sizes: {
+            size: selectedSize.size,
+            price: selectedSize.price,
+            stock: selectedSize.stock,
+            sku: selectedSize.sku,
+          },
+        },
+        quantity,
+      });
+    }
+
+    const newOrder = await WishList.create({
+      addedBy: userId,
+      products: detailedProducts,
+      totalAmount,
+    });
+
+    //push orderID to user
+    await Users.findByIdAndUpdate(
+      userId,
+      { $push: { wishlist: newOrder._id } },
+      { new: true }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Added to wishlist",
+      data: newOrder,
+    });
+  } catch (error) {
+    console.log("Error in addToWishList Controller :", error.message);
+    res.status(500).json({ success: false, message: "Internal Server error" });
+  }
+});
+export const fetchOrder = asyncHandler(async (req, res) => {
+  try {
+    const userID = req.params.id;
+
+    if (userID != req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: "unauthorized",
+      });
+    }
+
+    const orders = await Orders.find({ orderBy: userID });
+
+    res.status(200).json({
+      success: true,
+      message: "Fetched Successfully",
+      data: orders,
+    });
+  } catch (error) {
+    console.log("Error in CreateOrder Controller :", error.message);
+    res.status(500).json({ success: false, message: "Internal Server error" });
+  }
+});
